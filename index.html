@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Missile Risk Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: auto;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    button {
+      margin-top: 1.5rem;
+      padding: 0.75rem;
+      width: 100%;
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .result {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #fff3e0;
+      border-left: 4px solid #ff9800;
+    }
+    #canvas {
+      margin-top: 2rem;
+      width: 100%;
+      height: 300px;
+      background: #e0f7fa;
+      border: 1px solid #00796b;
+    }
+  </style>
+</head>
+<body>
+  <h1>Missile Direct Hit Risk Estimator</h1>
+  <form id="calculator">
+    <label>Floor Number:
+      <input type="number" id="floor" min="1" required />
+    </label>
+
+    <label>Shelter Facing Direction:
+      <select id="direction">
+        <option value="0">North (0°)</option>
+        <option value="45">North-East (45°)</option>
+        <option value="90">East (90°)</option>
+        <option value="135">South-East (135°)</option>
+        <option value="180">South (180°)</option>
+        <option value="225">South-West (225°)</option>
+        <option value="270">West (270°)</option>
+        <option value="315">North-West (315°)</option>
+      </select>
+    </label>
+
+    <label>Missile Azimuth (incoming direction, degrees):
+      <input type="number" id="azimuth" value="135" min="0" max="360" />
+    </label>
+
+    <button type="submit">Estimate Direct Hit Probability</button>
+  </form>
+
+  <div class="result" id="result" style="display: none;"></div>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    function azimuthDifference(a, b) {
+      let diff = Math.abs(a - b) % 360;
+      return diff > 180 ? 360 - diff : diff;
+    }
+
+    function trajectoryPenalty(diff, floors) {
+      if (diff < 30) return 1.0;
+      if (diff < 60) return 0.6 * (1 - floors * 0.05);
+      if (diff < 120) return 0.3 * (1 - floors * 0.07);
+      return 0.1 * (1 - floors * 0.1);
+    }
+
+    function baseDirectHitProbability() {
+      return 0.001;
+    }
+
+    function drawTrajectory(missileAzimuth, shelterAzimuth) {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const length = 100;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = '#d32f2f';
+      ctx.fill();
+      ctx.font = '12px Arial';
+      ctx.fillText('Shelter', centerX + 6, centerY - 6);
+
+      function drawArrow(angle, color, label) {
+        const rad = (angle - 90) * Math.PI / 180;
+        const x = centerX + length * Math.cos(rad);
+        const y = centerY + length * Math.sin(rad);
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.fillText(label, x + 5, y);
+      }
+
+      drawArrow(missileAzimuth, '#f57c00', 'Missile');
+      drawArrow(shelterAzimuth, '#00796b', 'Shelter');
+    }
+
+    document.getElementById('calculator').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const floor = parseInt(document.getElementById('floor').value);
+      const shelterAzimuth = parseInt(document.getElementById('direction').value);
+      const missileAzimuth = parseInt(document.getElementById('azimuth').value);
+
+      const diff = azimuthDifference(shelterAzimuth, missileAzimuth);
+      const angleModifier = trajectoryPenalty(diff, floor);
+      const baseProb = baseDirectHitProbability();
+
+      let adjustedProb = baseProb * angleModifier;
+      adjustedProb = Math.max(0, adjustedProb);
+
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('result').innerHTML = `
+        <strong>Missile Azimuth:</strong> ${missileAzimuth}°<br>
+        <strong>Shelter Direction:</strong> ${shelterAzimuth}°<br>
+        <strong>Floors in Path:</strong> ${floor}<br>
+        <strong>Estimated Direct Hit Probability:</strong> ${(adjustedProb * 100).toFixed(4)}%<br>
+        <em>This assumes average missile precision, with basic geometric shielding based on angle and elevation.</em>
+      `;
+
+      drawTrajectory(missileAzimuth, shelterAzimuth);
+    });
+  </script>
+</body>
+</html>
