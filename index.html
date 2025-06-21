@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Missile Risk Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Missile Direct Hit Risk Estimator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -36,45 +36,49 @@
       padding: 1rem;
       background: #fff3e0;
       border-left: 4px solid #ff9800;
+      white-space: pre-wrap;
     }
-    #canvas {
-      margin-top: 2rem;
-      width: 100%;
-      height: 300px;
-      background: #e0f7fa;
-      border: 1px solid #00796b;
+    #directionCheckboxes label {
+      display: inline-block;
+      margin-right: 10px;
     }
   </style>
 </head>
 <body>
   <h1>Missile Direct Hit Risk Estimator</h1>
   <form id="calculator">
-    <label>Floor Number:
-      <input type="number" id="floor" min="1" required />
+    <label>Floor Number (can be negative for underground):  
+      <input type="number" id="floor" min="-10" max="50" step="1" value="0" required />
     </label>
 
-    <label>Shelter Facing Direction:
-      <select id="direction">
-        <option value="0">North (0°)</option>
-        <option value="45">North-East (45°)</option>
-        <option value="90">East (90°)</option>
-        <option value="135">South-East (135°)</option>
-        <option value="180">South (180°)</option>
-        <option value="225">South-West (225°)</option>
-        <option value="270">West (270°)</option>
-        <option value="315">North-West (315°)</option>
+    <label>Total Floors in Building:  
+      <input type="number" id="totalFloors" min="1" max="100" step="1" value="14" required />
+    </label>
+
+    <label>Shelter Coverage Directions (choose all that apply):</label>
+    <div id="directionCheckboxes">
+      <label><input type="checkbox" name="shelterDir" value="0" /> North</label>
+      <label><input type="checkbox" name="shelterDir" value="45" /> North-East</label>
+      <label><input type="checkbox" name="shelterDir" value="90" /> East</label>
+      <label><input type="checkbox" name="shelterDir" value="135" /> South-East</label>
+      <label><input type="checkbox" name="shelterDir" value="180" /> South</label>
+      <label><input type="checkbox" name="shelterDir" value="225" /> South-West</label>
+      <label><input type="checkbox" name="shelterDir" value="270" /> West</label>
+      <label><input type="checkbox" name="shelterDir" value="315" /> North-West</label>
+    </div>
+
+    <label>Your Region in Israel:
+      <select id="userRegion">
+        <option value="south">South</option>
+        <option value="center" selected>Center</option>
+        <option value="north">North</option>
       </select>
-    </label>
-
-    <label>Missile Azimuth (incoming direction, degrees):
-      <input type="number" id="azimuth" value="135" min="0" max="360" />
     </label>
 
     <button type="submit">Estimate Direct Hit Probability</button>
   </form>
 
-  <div class="result" id="result" style="display: none;"></div>
-  <canvas id="canvas"></canvas>
+  <div class="result" id="result" style="display:none;"></div>
 
   <script>
     function azimuthDifference(a, b) {
@@ -82,75 +86,59 @@
       return diff > 180 ? 360 - diff : diff;
     }
 
-    function trajectoryPenalty(diff, floors) {
-      if (diff < 30) return 1.0;
-      if (diff < 60) return 0.6 * (1 - floors * 0.05);
-      if (diff < 120) return 0.3 * (1 - floors * 0.07);
-      return 0.1 * (1 - floors * 0.1);
+    function trajectoryPenalty(diff, floor) {
+      if (floor < 0) {
+        return 0.5 * (1 - Math.abs(floor) * 0.1);
+      }
+      if (diff < 30) return 1.0 * (1 - floor * 0.03);
+      if (diff < 60) return 0.6 * (1 - floor * 0.05);
+      if (diff < 120) return 0.3 * (1 - floor * 0.07);
+      return 0.1 * (1 - floor * 0.1);
     }
 
     function baseDirectHitProbability() {
       return 0.001;
     }
 
-    function drawTrajectory(missileAzimuth, shelterAzimuth) {
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const length = 100;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = '#d32f2f';
-      ctx.fill();
-      ctx.font = '12px Arial';
-      ctx.fillText('Shelter', centerX + 6, centerY - 6);
-
-      function drawArrow(angle, color, label) {
-        const rad = (angle - 90) * Math.PI / 180;
-        const x = centerX + length * Math.cos(rad);
-        const y = centerY + length * Math.sin(rad);
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(x, y);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.fillStyle = color;
-        ctx.fillText(label, x + 5, y);
-      }
-
-      drawArrow(missileAzimuth, '#f57c00', 'Missile');
-      drawArrow(shelterAzimuth, '#00796b', 'Shelter');
-    }
+    const azimuthMap = {
+      kermanshah: { south: 240, center: 260, north: 280 },
+      isfahan:    { south: 270, center: 272, north: 275 },
+      tabriz:     { south: 235, center: 240, north: 245 }
+    };
 
     document.getElementById('calculator').addEventListener('submit', function(e) {
       e.preventDefault();
 
       const floor = parseInt(document.getElementById('floor').value);
-      const shelterAzimuth = parseInt(document.getElementById('direction').value);
-      const missileAzimuth = parseInt(document.getElementById('azimuth').value);
+      const totalFloors = parseInt(document.getElementById('totalFloors').value);
+      const userRegion = document.getElementById('userRegion').value;
 
-      const diff = azimuthDifference(shelterAzimuth, missileAzimuth);
-      const angleModifier = trajectoryPenalty(diff, floor);
-      const baseProb = baseDirectHitProbability();
+      // Get shelter coverage directions
+      const selectedDirs = Array.from(document.querySelectorAll('input[name="shelterDir"]:checked'))
+        .map(el => parseInt(el.value));
+      if (selectedDirs.length === 0) selectedDirs.push(0); // default North
 
-      let adjustedProb = baseProb * angleModifier;
-      adjustedProb = Math.max(0, adjustedProb);
+      // Calculate probability for each base
+      const bases = ['kermanshah', 'isfahan', 'tabriz'];
+      let outputHtml = `Floor (current/total): ${floor} / ${totalFloors}\n\n`;
 
-      document.getElementById('result').style.display = 'block';
-      document.getElementById('result').innerHTML = `
-        <strong>Missile Azimuth:</strong> ${missileAzimuth}°<br>
-        <strong>Shelter Direction:</strong> ${shelterAzimuth}°<br>
-        <strong>Floors in Path:</strong> ${floor}<br>
-        <strong>Estimated Direct Hit Probability:</strong> ${(adjustedProb * 100).toFixed(4)}%<br>
-        <em>This assumes average missile precision, with basic geometric shielding based on angle and elevation.</em>
-      `;
+      bases.forEach(base => {
+        const missileAzimuth = azimuthMap[base][userRegion];
+        const minDiff = selectedDirs.reduce((minDiff, dir) => {
+          const diff = azimuthDifference(dir, missileAzimuth);
+          return Math.min(minDiff, diff);
+        }, 360);
+        const angleModifier = trajectoryPenalty(minDiff, floor);
+        const prob = Math.max(0, baseDirectHitProbability() * angleModifier);
 
-      drawTrajectory(missileAzimuth, shelterAzimuth);
+        outputHtml += `${base.charAt(0).toUpperCase() + base.slice(1)} Base\n`;
+        outputHtml += `  Missile Azimuth: ${missileAzimuth}°\n`;
+        outputHtml += `  Estimated Direct Hit Probability: ${(prob * 100).toFixed(4)}%\n\n`;
+      });
+
+      const resultDiv = document.getElementById('result');
+      resultDiv.style.display = 'block';
+      resultDiv.textContent = outputHtml;
     });
   </script>
 </body>
